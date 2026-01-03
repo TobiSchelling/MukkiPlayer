@@ -6,81 +6,93 @@
 //
 
 import SwiftUI
-import CoreData
+import MusicKit
 
 struct ContentView: View {
-    @Environment(\.managedObjectContext) private var viewContext
-
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Item.timestamp, ascending: true)],
-        animation: .default)
-    private var items: FetchedResults<Item>
-
+    @StateObject private var musicKitService = MusicKitService.shared
+    @StateObject private var playerManager = MusicPlayerManager.shared
+    
     var body: some View {
-        NavigationView {
-            List {
-                ForEach(items) { item in
-                    NavigationLink {
-                        Text("Item at \(item.timestamp!, formatter: itemFormatter)")
-                    } label: {
-                        Text(item.timestamp!, formatter: itemFormatter)
-                    }
-                }
-                .onDelete(perform: deleteItems)
-            }
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
-                ToolbarItem {
-                    Button(action: addItem) {
-                        Label("Add Item", systemImage: "plus")
-                    }
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                // Authorization overlay or main content
+                if !musicKitService.isAuthorized {
+                    authorizationView
+                } else {
+                    // Main tile grid
+                    TileGridView()
+                        .frame(maxHeight: .infinity)
+                    
+                    // Bottom playbar
+                    PlaybarView()
+                        .frame(height: 100)
                 }
             }
-            Text("Select an item")
+            .background(
+                LinearGradient(
+                    gradient: Gradient(colors: [
+                        Color(red: 0.1, green: 0.1, blue: 0.15),
+                        Color(red: 0.15, green: 0.12, blue: 0.2)
+                    ]),
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+        }
+        .task {
+            await musicKitService.checkAuthorization()
         }
     }
-
-    private func addItem() {
-        withAnimation {
-            let newItem = Item(context: viewContext)
-            newItem.timestamp = Date()
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+    
+    private var authorizationView: some View {
+        VStack(spacing: 24) {
+            Spacer()
+            
+            Image(systemName: "music.note.house.fill")
+                .font(.system(size: 80))
+                .foregroundColor(.white.opacity(0.8))
+            
+            Text("Welcome to MukkiPlayer!")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+            
+            Text("A kid-friendly music player for your Apple Music library")
+                .font(.title3)
+                .foregroundColor(.white.opacity(0.7))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+            
+            Spacer()
+            
+            Button(action: {
+                Task {
+                    await musicKitService.requestAuthorization()
+                }
+            }) {
+                HStack {
+                    Image(systemName: "music.note")
+                    Text("Connect to Apple Music")
+                }
+                .font(.title2.weight(.semibold))
+                .foregroundColor(.white)
+                .padding(.horizontal, 40)
+                .padding(.vertical, 18)
+                .background(
+                    LinearGradient(
+                        gradient: Gradient(colors: [.pink, .purple]),
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .cornerRadius(16)
             }
-        }
-    }
-
-    private func deleteItems(offsets: IndexSet) {
-        withAnimation {
-            offsets.map { items[$0] }.forEach(viewContext.delete)
-
-            do {
-                try viewContext.save()
-            } catch {
-                // Replace this implementation with code to handle the error appropriately.
-                // fatalError() causes the application to generate a crash log and terminate. You should not use this function in a shipping application, although it may be useful during development.
-                let nsError = error as NSError
-                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
-            }
+            
+            Spacer()
         }
     }
 }
 
-private let itemFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .medium
-    return formatter
-}()
-
 #Preview {
-    ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+    ContentView()
 }
